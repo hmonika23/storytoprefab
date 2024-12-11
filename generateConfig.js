@@ -1,7 +1,7 @@
-const fs = require('fs');
-const path = require('path');
-const glob = require('glob');
-const babelParser = require('@babel/parser');
+import { readFileSync, writeFileSync } from 'fs';
+import { basename, resolve } from 'path';
+import glob from 'glob';
+import { parse } from '@babel/parser';
 
 // Function to get all .stories.js files synchronously
 const getStoriesFiles = (baseDir) => {
@@ -19,13 +19,13 @@ const getStoriesFiles = (baseDir) => {
 
 // Function to extract metadata from the parsed code
 const extractMetadata = (code, filePath) => {
-  const ast = babelParser.parse(code, {
+  const ast = parse(code, {
     sourceType: 'module',
     plugins: ['typescript','jsx'], // For JSX support in .js files
   });
 
   const metadata = {
-    name: path.basename(filePath, '.stories.js').toLowerCase(),
+    name: basename(filePath, '.stories.js').toLowerCase(),
     props: [],
   };
 
@@ -91,8 +91,8 @@ const extractMetadata = (code, filePath) => {
 
 // Main function to generate wmprefabconfig.json
 const generatePrefabConfig = async () => {
-  const baseDir = path.resolve(process.cwd(), './components'); // Base directory for story files
-  const outputPath = path.resolve(process.cwd(), './wmprefab.config.json'); // Output file location
+  const baseDir = resolve(process.cwd(), './components'); // Base directory for story files
+  const outputPath = resolve(process.cwd(), './wmprefab.config.json'); // Output file location
 
   console.log('Base directory:', baseDir);
   console.log('Output path:', outputPath);
@@ -102,7 +102,7 @@ const generatePrefabConfig = async () => {
     const components = [];
 
     for (const file of storiesFiles) {
-      const code = fs.readFileSync(file, 'utf-8'); // Read the story file
+      const code = readFileSync(file, 'utf-8'); // Read the story file
       const metadata = extractMetadata(code, file); // Extract metadata
 
       components.push({
@@ -118,7 +118,7 @@ const generatePrefabConfig = async () => {
     }
 
     const prefabConfig = { components };
-    fs.writeFileSync(outputPath, JSON.stringify(prefabConfig, null, 2));
+    writeFileSync(outputPath, JSON.stringify(prefabConfig, null, 2));
     console.log(`wmprefabconfig.json generated at ${outputPath}`);
   } catch (error) {
     console.error('Error generating wmprefabconfig.json:', error);

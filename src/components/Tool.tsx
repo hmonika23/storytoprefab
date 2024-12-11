@@ -13,7 +13,7 @@ export const Tool = memo(function MyAddonSelector({ api }: ToolProps) {
     const currentStory = api.getCurrentStoryData();
 
     console.log("Current story data:", currentStory);
-    console.log("Running version 1.0.6");
+    // console.log("Running version 1.0.6");
     if (!currentStory || !currentStory.importPath) {
       console.error("No story is currently rendered or importPath is missing.");
       return;
