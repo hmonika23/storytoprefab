@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "description": "This addon will be used to create a config file for prefab creation  and download option for the same ",
   "keywords": [
-    "storybook-addons", "storybook-addons"
+    "storybook-addons",
+    "storybook-addons"
   ],
   "repository": {
     "type": "git",
@@ -31,7 +32,8 @@
     "dist/**/*",
     "README.md",
     "*.js",
-    "*.d.ts"
+    "*.d.ts",
+    "generateConfig.cjs"
   ],
   "scripts": {
     "build": "tsup",
@@ -42,10 +44,12 @@
     "release": "npm run build && auto shipit",
     "eject-ts": "zx scripts/eject-typescript.js",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "postinstall": "node ./generateConfig.cjs"
   },
   "dependencies": {
-    "@storybook/icons": "^1.2.10"
+    "@storybook/icons": "^1.2.10",
+    "user": "^0.0.0"
   },
   "devDependencies": {
     "@storybook/addon-essentials": "0.0.0-pr-26654-sha-49d01553",
@@ -99,7 +103,15 @@
   "storybook": {
     "displayName": "storytoprefab",
     "supportedFrameworks": [
-      "react", "vue", "angular", "web-components", "ember", "html", "svelte", "preact", "react-native"
+      "react",
+      "vue",
+      "angular",
+      "web-components",
+      "ember",
+      "html",
+      "svelte",
+      "preact",
+      "react-native"
     ],
     "icon": "https://user-images.githubusercontent.com/321738/63501763-88dbf600-c4cc-11e9-96cd-94adadc2fd72.png"
   }
