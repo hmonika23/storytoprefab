@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { readFileSync, writeFileSync } from 'fs';
 import { basename, resolve } from 'path';
 import glob from 'glob';
@@ -23,11 +25,13 @@ const extractMetadata = (code, filePath) => {
     sourceType: 'module',
     plugins: ['typescript','jsx'], // For JSX support in .js files
   });
-
+console.log("ast", ast);
   const metadata = {
     name: basename(filePath, '.stories.js').toLowerCase(),
     props: [],
   };
+
+  console.log("metadata", metadata);
 
   ast.program.body.forEach((node) => {
     if (

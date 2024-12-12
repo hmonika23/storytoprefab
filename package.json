@@ -1,6 +1,6 @@
 {
   "name": "storybook-addon-storytoprefab",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "This addon will be used to create a config file for prefab creation  and download option for the same ",
   "keywords": [
     "storybook-addons",
@@ -54,6 +54,11 @@
     "@storybook/icons": "^1.2.10",
     "user": "^0.0.0"
   },
+
+  "bin": {
+  "storytoprefab_generate_prefabconfig": "./generateConfig.js"
+}
+,
   "devDependencies": {
     "@storybook/addon-essentials": "0.0.0-pr-26654-sha-49d01553",
     "@storybook/addon-interactions": "0.0.0-pr-26654-sha-49d01553",
