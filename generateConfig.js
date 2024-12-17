@@ -1,16 +1,13 @@
 #!/usr/bin/env node
 
 import { readFileSync, writeFileSync } from 'fs';
-import {  basename, dirname, resolve } from 'path';
+import { basename, dirname, resolve, relative } from 'path';
 import glob from 'glob';
 import { parse } from '@babel/parser';
 
-// Function to get all .stories.js files synchronously
+// Function to get all story files synchronously
 const getStoriesFiles = (baseDir) => {
-  // const pattern = `${baseDir.replace(/\\/g, '/')}/**/*.stories.js`;
-
-  const pattern = `${baseDir.replace(/\\/g, '/')}/**/*.stories.{js,tsx}`;
-
+  const pattern = `${baseDir.replace(/\\/g, '/')}/**/*.stories.@(js|jsx|ts|tsx)`;
   console.log('Using glob pattern:', pattern);
 
   const files = glob.sync(pattern);
@@ -20,26 +17,24 @@ const getStoriesFiles = (baseDir) => {
 };
 
 // Function to extract metadata from the parsed code
-
 const extractMetadata = (code, filePath) => {
   const ast = parse(code, {
     sourceType: 'module',
     plugins: ['typescript', 'jsx'], // For JSX and TypeScript support
   });
 
-  console.log("ast", ast);
-  console.log("filePath", filePath);
+  console.log('filePath:', filePath);
 
   // Extract the parent directory name as the component name
   const componentName = basename(dirname(filePath));
-  console.log("componentName", componentName);
+  console.log('componentName:', componentName);
+
   const metadata = {
-    name: componentName.toLowerCase(), // Normalize to lowercase
+    name: componentName.toLowerCase(),
     props: [],
   };
 
-  console.log("metadata", metadata);
-
+  // Process AST to fetch props
   ast.program.body.forEach((node) => {
     if (
       node.type === 'ExportDefaultDeclaration' &&
@@ -57,15 +52,14 @@ const extractMetadata = (code, filePath) => {
                 details.description = detail.value.value;
               }
               if (detail.key.name === 'defaultValue') {
-                // Handle arrays, objects, and primitives
                 if (detail.value.type === 'ArrayExpression') {
                   details.defaultValue = detail.value.elements.map((el) =>
                     el.type === 'ArrayExpression'
                       ? el.elements.map((subEl) => subEl.value)
                       : el.value
                   );
-                  details.isList = true; // Mark as a list if it's an array
-                  details.type = 'object'; // Use 'object' for structured data
+                  details.isList = true;
+                  details.type = 'object';
                 } else if (detail.value.type === 'ObjectExpression') {
                   details.defaultValue = {};
                   detail.value.properties.forEach((objProp) => {
@@ -99,32 +93,42 @@ const extractMetadata = (code, filePath) => {
   return metadata;
 };
 
-
-
-
 // Main function to generate wmprefabconfig.json
 const generatePrefabConfig = async () => {
-  const baseDir = resolve(process.cwd(), './components'); // Base directory for story files
-  const outputPath = resolve(process.cwd(), './wmprefab.config.json'); // Output file location
+  const baseDir = resolve(process.cwd(), './components');
+  const outputPath = resolve(process.cwd(), './wmprefab.config.json');
 
   console.log('Base directory:', baseDir);
   console.log('Output path:', outputPath);
 
   try {
-    const storiesFiles = getStoriesFiles(baseDir); // Fetch story files
+    const storiesFiles = getStoriesFiles(baseDir);
     const components = [];
 
     for (const file of storiesFiles) {
-      const code = readFileSync(file, 'utf-8'); // Read the story file
-      const metadata = extractMetadata(code, file); // Extract metadata
+      const code = readFileSync(file, 'utf-8');
+      const metadata = extractMetadata(code, file);
+
+      const componentDir = dirname(file); // Directory containing the component
+      const componentName = basename(componentDir); // Component name
+      const possibleFiles = glob.sync(
+        `${componentDir}/${componentName}.@(js|jsx|ts|tsx)`
+      );
+
+      if (possibleFiles.length === 0) {
+        console.warn(`No component file found for ${componentName}`);
+        continue;
+      }
+
+      const componentFile = relative(baseDir, possibleFiles[0]);
 
       components.push({
         name: metadata.name,
         version: '1.0.0',
         displayName: metadata.name.replace(/-/g, ' ').toUpperCase(),
         baseDir: './components',
-        module: `require('./${metadata.name}/${metadata.name}').default`,
-        include: [`./${metadata.name}/${metadata.name}.js`],
+        module: `require('./${componentFile}').default`,
+        include: [`./${componentFile}`],
         props: metadata.props,
         packages: [],
       });
