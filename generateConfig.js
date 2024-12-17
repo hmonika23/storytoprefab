@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync, writeFileSync } from 'fs';
-import { basename, resolve } from 'path';
+import {  basename, dirname, resolve } from 'path';
 import glob from 'glob';
 import { parse } from '@babel/parser';
 
@@ -31,7 +31,7 @@ const extractMetadata = (code, filePath) => {
   console.log("filePath", filePath);
 
   // Extract the parent directory name as the component name
-  const componentName = path.basename(path.dirname(filePath));
+  const componentName = basename(dirname(filePath));
   console.log("componentName", componentName);
   const metadata = {
     name: componentName.toLowerCase(), // Normalize to lowercase
