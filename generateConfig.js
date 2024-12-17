@@ -28,7 +28,7 @@ const extractMetadata = (code, filePath) => {
   });
 
   console.log("ast", ast);
-
+       console.log("filePath", filePath);
   const metadata = {
     name: basename(filePath).replace(/(\.stories\.js|\.tsx|\.ts)$/, '').toLowerCase(),
     props: [],
