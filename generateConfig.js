@@ -28,9 +28,13 @@ const extractMetadata = (code, filePath) => {
   });
 
   console.log("ast", ast);
-       console.log("filePath", filePath);
+  console.log("filePath", filePath);
+
+  // Extract the parent directory name as the component name
+  const componentName = path.basename(path.dirname(filePath));
+  console.log("componentName", componentName);
   const metadata = {
-    name: basename(filePath).replace(/(\.stories\.js|\.tsx|\.ts)$/, '').toLowerCase(),
+    name: componentName.toLowerCase(), // Normalize to lowercase
     props: [],
   };
 
@@ -94,6 +98,7 @@ const extractMetadata = (code, filePath) => {
 
   return metadata;
 };
+
 
 
 
