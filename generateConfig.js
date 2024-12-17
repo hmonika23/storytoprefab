@@ -20,14 +20,17 @@ const getStoriesFiles = (baseDir) => {
 };
 
 // Function to extract metadata from the parsed code
+
 const extractMetadata = (code, filePath) => {
   const ast = parse(code, {
     sourceType: 'module',
-    plugins: ['typescript','jsx'], // For JSX support in .js files
+    plugins: ['typescript', 'jsx'], // For JSX and TypeScript support
   });
-console.log("ast", ast);
+
+  console.log("ast", ast);
+
   const metadata = {
-    name: basename(filePath, '.stories.js').toLowerCase(),
+    name: basename(filePath).replace(/(\.stories\.js|\.tsx|\.ts)$/, '').toLowerCase(),
     props: [],
   };
 
@@ -91,6 +94,7 @@ console.log("ast", ast);
 
   return metadata;
 };
+
 
 
 // Main function to generate wmprefabconfig.json
