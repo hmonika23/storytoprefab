@@ -16,6 +16,20 @@ const getStoriesFiles = (baseDir) => {
   return files;
 };
 
+// Function to check if a file has a default export
+const hasDefaultExport = (filePath) => {
+  const code = readFileSync(filePath, 'utf-8');
+  const ast = parse(code, {
+    sourceType: 'module',
+    plugins: ['typescript', 'jsx'], // For JSX and TypeScript support
+  });
+
+  return ast.program.body.some(
+    (node) =>
+      node.type === 'ExportDefaultDeclaration'
+  );
+};
+
 // Function to extract metadata from the parsed code
 const extractMetadata = (code, filePath) => {
   const ast = parse(code, {
@@ -110,7 +124,9 @@ const generatePrefabConfig = async () => {
       const metadata = extractMetadata(code, file);
 
       const componentDir = dirname(file); // Directory containing the component
+      console.log('componentDir:', componentDir);
       const componentName = basename(componentDir); // Component name
+      console.log('componentName:', componentName);
       const possibleFiles = glob.sync(
         `${componentDir}/${componentName}.@(js|jsx|ts|tsx)`
       );
@@ -120,7 +136,12 @@ const generatePrefabConfig = async () => {
         continue;
       }
 
-      const componentFile = relative(baseDir, possibleFiles[0]);
+      const componentFile = relative(baseDir, possibleFiles[0]).replace(/\\/g, '/'); // Normalize to forward slashes
+
+      if (!hasDefaultExport(possibleFiles[0])) {
+        console.warn(`No default export found in ${possibleFiles[0]}`);
+        continue;
+      }
 
       console.log('componentFile:', componentFile);
 
