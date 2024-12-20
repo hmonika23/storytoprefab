@@ -122,6 +122,8 @@ const generatePrefabConfig = async () => {
 
       const componentFile = relative(baseDir, possibleFiles[0]);
 
+      console.log('componentFile:', componentFile);
+
       components.push({
         name: metadata.name,
         version: '1.0.0',
