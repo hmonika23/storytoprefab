@@ -16,125 +16,107 @@ const getStoriesFiles = (baseDir) => {
   return files;
 };
 
-// Function to check if a file has a default export
-const hasDefaultExport = (filePath) => {
-  const code = readFileSync(filePath, 'utf-8');
-  const ast = parse(code, {
-    sourceType: 'module',
-    plugins: ['typescript', 'jsx'], // For JSX and TypeScript support
-  });
+// Helper function to extract `args` from the `args` or `argTypes` node
+const extractArgsFromNode = (argsNode) => {
+  if (!argsNode || argsNode.type !== 'ObjectExpression') return [];
+  return argsNode.properties.map((prop) => {
+    const name = prop.key.name || prop.key.value; // Handle both identifier and string keys
+    let value = null;
 
-  return ast.program.body.some(
-    (node) => node.type === 'ExportDefaultDeclaration'
-  );
+    switch (prop.value.type) {
+      case 'StringLiteral':
+      case 'NumericLiteral':
+      case 'BooleanLiteral':
+        value = prop.value.value;
+        break;
+      case 'CallExpression':
+        value = prop.value.callee.name; // Handles actions like `action("onPress")`
+        break;
+      case 'ArrayExpression':
+        value = prop.value.elements.map((el) =>
+          el.type === 'StringLiteral' || el.type === 'NumericLiteral'
+            ? el.value
+            : null
+        );
+        break;
+      case 'ObjectExpression':
+        value = {};
+        prop.value.properties.forEach((objProp) => {
+          value[objProp.key.name] = objProp.value.value;
+        });
+        break;
+      default:
+        value = null; // Default for unsupported types
+    }
+
+    return { name, value };
+  });
 };
 
-// Function to extract metadata and args from the parsed code
+// Function to extract metadata from the parsed code
 const extractMetadata = (code, filePath) => {
   const ast = parse(code, {
     sourceType: 'module',
     plugins: ['typescript', 'jsx'], // For JSX and TypeScript support
   });
 
-  console.log('filePath:', filePath);
-
-  // Extract the parent directory name as the component name
-  const componentName = basename(dirname(filePath));
-  console.log('componentName:', componentName);
-
   const metadata = {
-    name: componentName.toLowerCase(),
+    name: basename(dirname(filePath)).toLowerCase(),
     props: [],
   };
 
-  // Helper function to process args
-  const extractArgs = (argsNode) => {
-    const args = [];
-    argsNode.properties.forEach((prop) => {
-      const name = prop.key.name || prop.key.value; // Support computed keys
-      let value;
+  let metaArgs = [];
+  let storyArgs = [];
 
-      // Handle different node types for property values
-      switch (prop.value.type) {
-        case 'StringLiteral':
-        case 'NumericLiteral':
-        case 'BooleanLiteral':
-          value = prop.value.value;
-          break;
-        case 'ArrayExpression':
-          value = prop.value.elements.map((el) =>
-            el.type === 'StringLiteral' || el.type === 'NumericLiteral'
-              ? el.value
-              : null
-          );
-          break;
-        case 'ObjectExpression':
-          value = {};
-          prop.value.properties.forEach((objProp) => {
-            value[objProp.key.name] = objProp.value.value;
-          });
-          break;
-        default:
-          value = null; // Fallback for unsupported value types
+  ast.program.body.forEach((node) => {
+    // Detect `meta` default export or variable declaration
+    if (
+      node.type === 'ExportDefaultDeclaration' ||
+      (node.type === 'VariableDeclaration' &&
+        node.declarations.some(
+          (decl) => decl.id.name === 'meta' && decl.init.type === 'ObjectExpression'
+        ))
+    ) {
+      const metaNode = node.declaration || node.declarations.find((d) => d.id.name === 'meta').init;
+      
+      // Extract `args` property from meta if exists
+      const argsProperty = metaNode.properties.find((prop) => prop.key.name === 'args');
+      if (argsProperty) {
+        metaArgs = extractArgsFromNode(argsProperty.value);
       }
 
-      args.push({ name, value });
-    });
-    return args;
-  };
-
-  // Process AST to fetch props and args
-  ast.program.body.forEach((node) => {
-    if (
-      node.type === 'ExportDefaultDeclaration' &&
-      node.declaration.type === 'ObjectExpression'
-    ) {
-      node.declaration.properties.forEach((prop) => {
-        if (prop.key.name === 'args') {
-          metadata.props = extractArgs(prop.value);
-        }
-        if (prop.key.name === 'argTypes') {
-          metadata.props = extractArgs(prop.value);
-        }
-      });
+      // Extract `argTypes` property from meta if exists
+      const argTypesProperty = metaNode.properties.find((prop) => prop.key.name === 'argTypes');
+      if (argTypesProperty) {
+        metaArgs = [...metaArgs, ...extractArgsFromNode(argTypesProperty.value)];
+      }
     }
 
-    if (
-      node.type === 'VariableDeclaration' &&
-      node.declarations.some(
-        (decl) => decl.id.name === 'meta' && decl.init.type === 'ObjectExpression'
-      )
-    ) {
-      const metaDecl = node.declarations.find(
-        (decl) => decl.id.name === 'meta'
-      );
-      if (metaDecl.init.properties) {
-        metaDecl.init.properties.forEach((prop) => {
-          if (prop.key.name === 'args') {
-            metadata.props = extractArgs(prop.value);
+    // Detect individual stories and their `args`
+    if (node.type === 'ExportNamedDeclaration') {
+      const variableDeclaration = node.declaration;
+      if (
+        variableDeclaration &&
+        variableDeclaration.type === 'VariableDeclaration'
+      ) {
+        variableDeclaration.declarations.forEach((decl) => {
+          if (
+            decl.init &&
+            decl.init.type === 'ObjectExpression' &&
+            decl.init.properties.some((prop) => prop.key.name === 'args')
+          ) {
+            const argsProperty = decl.init.properties.find(
+              (prop) => prop.key.name === 'args'
+            );
+            storyArgs.push(...extractArgsFromNode(argsProperty.value));
           }
         });
       }
     }
-
-    if (
-      node.type === 'ExportNamedDeclaration' &&
-      node.declaration.type === 'VariableDeclaration'
-    ) {
-      node.declaration.declarations.forEach((decl) => {
-        if (
-          decl.init.type === 'ObjectExpression' &&
-          decl.init.properties.some((prop) => prop.key.name === 'args')
-        ) {
-          const argsProp = decl.init.properties.find(
-            (prop) => prop.key.name === 'args'
-          );
-          metadata.props = [...metadata.props, ...extractArgs(argsProp.value)];
-        }
-      });
-    }
   });
 
+  // Merge `metaArgs` and `storyArgs`
+  metadata.props = [...metaArgs, ...storyArgs];
   return metadata;
 };
 
@@ -155,9 +137,7 @@ const generatePrefabConfig = async () => {
       const metadata = extractMetadata(code, file);
 
       const componentDir = dirname(file); // Directory containing the component
-      console.log('componentDir:', componentDir);
       const componentName = basename(componentDir); // Component name
-      console.log('componentName:', componentName);
       const possibleFiles = glob.sync(
         `${componentDir}/${componentName}.@(js|jsx|ts|tsx)`
       );
@@ -167,14 +147,10 @@ const generatePrefabConfig = async () => {
         continue;
       }
 
-      const componentFile = relative(baseDir, possibleFiles[0]).replace(/\\/g, '/'); // Normalize to forward slashes
-
-      if (!hasDefaultExport(possibleFiles[0])) {
-        console.warn(`No default export found in ${possibleFiles[0]}`);
-        continue;
-      }
-
-      console.log('componentFile:', componentFile);
+      const componentFile = relative(baseDir, possibleFiles[0]).replace(
+        /\\/g,
+        '/'
+      );
 
       components.push({
         name: metadata.name,
