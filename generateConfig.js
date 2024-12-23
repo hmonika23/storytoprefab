@@ -55,10 +55,10 @@ const extractMetadata = (code, filePath) => {
       node.declaration.type === 'ObjectExpression'
     ) {
       node.declaration.properties.forEach((prop) => {
-        if (prop.key.name === 'argTypes') {
+        if (prop.key.name === 'argTypes' || prop.key.name === 'args') { // Modified condition
           const props = [];
           prop.value.properties.forEach((argProp) => {
-            const name = argProp.key.name;
+            const name = argProp.key.name || argProp.key.value; // Support computed keys
             const details = {};
 
             argProp.value.properties.forEach((detail) => {
