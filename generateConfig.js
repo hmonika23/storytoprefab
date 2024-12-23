@@ -25,8 +25,7 @@ const hasDefaultExport = (filePath) => {
   });
 
   return ast.program.body.some(
-    (node) =>
-      node.type === 'ExportDefaultDeclaration'
+    (node) => node.type === 'ExportDefaultDeclaration'
   );
 };
 
@@ -50,27 +49,35 @@ const extractMetadata = (code, filePath) => {
 
   // Helper function to process args
   const extractArgs = (argsNode) => {
-
-    console.log('argsNode:', argsNode); 
     const args = [];
     argsNode.properties.forEach((prop) => {
       const name = prop.key.name || prop.key.value; // Support computed keys
-      console.log("name", name);
       let value;
-      if (prop.value.type === 'Literal') {
-        value = prop.value.value;
-      } else if (prop.value.type === 'ArrayExpression') {
-        value = prop.value.elements.map((el) =>
-          el.type === 'Literal' ? el.value : null
-        );
-      } else if (prop.value.type === 'ObjectExpression') {
-        value = {};
-        prop.value.properties.forEach((objProp) => {
-          value[objProp.key.name] = objProp.value.value;
-        });
-      } else {
-        value = null; // Fallback for unsupported value types
+
+      // Handle different node types for property values
+      switch (prop.value.type) {
+        case 'StringLiteral':
+        case 'NumericLiteral':
+        case 'BooleanLiteral':
+          value = prop.value.value;
+          break;
+        case 'ArrayExpression':
+          value = prop.value.elements.map((el) =>
+            el.type === 'StringLiteral' || el.type === 'NumericLiteral'
+              ? el.value
+              : null
+          );
+          break;
+        case 'ObjectExpression':
+          value = {};
+          prop.value.properties.forEach((objProp) => {
+            value[objProp.key.name] = objProp.value.value;
+          });
+          break;
+        default:
+          value = null; // Fallback for unsupported value types
       }
+
       args.push({ name, value });
     });
     return args;
@@ -78,8 +85,6 @@ const extractMetadata = (code, filePath) => {
 
   // Process AST to fetch props and args
   ast.program.body.forEach((node) => {
-
-    console.log('node', node);
     if (
       node.type === 'ExportDefaultDeclaration' &&
       node.declaration.type === 'ObjectExpression'
@@ -148,7 +153,7 @@ const generatePrefabConfig = async () => {
     for (const file of storiesFiles) {
       const code = readFileSync(file, 'utf-8');
       const metadata = extractMetadata(code, file);
-       console.log('metadata:', metadata);
+
       const componentDir = dirname(file); // Directory containing the component
       console.log('componentDir:', componentDir);
       const componentName = basename(componentDir); // Component name
