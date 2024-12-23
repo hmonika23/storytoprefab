@@ -30,7 +30,7 @@ const hasDefaultExport = (filePath) => {
   );
 };
 
-// Function to extract metadata from the parsed code
+// Function to extract metadata and args from the parsed code
 const extractMetadata = (code, filePath) => {
   const ast = parse(code, {
     sourceType: 'module',
@@ -48,57 +48,83 @@ const extractMetadata = (code, filePath) => {
     props: [],
   };
 
-  // Process AST to fetch props
+  // Helper function to process args
+  const extractArgs = (argsNode) => {
+
+    console.log('argsNode:', argsNode); 
+    const args = [];
+    argsNode.properties.forEach((prop) => {
+      const name = prop.key.name || prop.key.value; // Support computed keys
+      console.log("name", name);
+      let value;
+      if (prop.value.type === 'Literal') {
+        value = prop.value.value;
+      } else if (prop.value.type === 'ArrayExpression') {
+        value = prop.value.elements.map((el) =>
+          el.type === 'Literal' ? el.value : null
+        );
+      } else if (prop.value.type === 'ObjectExpression') {
+        value = {};
+        prop.value.properties.forEach((objProp) => {
+          value[objProp.key.name] = objProp.value.value;
+        });
+      } else {
+        value = null; // Fallback for unsupported value types
+      }
+      args.push({ name, value });
+    });
+    return args;
+  };
+
+  // Process AST to fetch props and args
   ast.program.body.forEach((node) => {
+
+    console.log('node', node);
     if (
       node.type === 'ExportDefaultDeclaration' &&
       node.declaration.type === 'ObjectExpression'
     ) {
       node.declaration.properties.forEach((prop) => {
-        if (prop.key.name === 'argTypes' || prop.key.name === 'args') { // Modified condition
-          const props = [];
-          prop.value.properties.forEach((argProp) => {
-            const name = argProp.key.name || argProp.key.value; // Support computed keys
-            const details = {};
+        if (prop.key.name === 'args') {
+          metadata.props = extractArgs(prop.value);
+        }
+        if (prop.key.name === 'argTypes') {
+          metadata.props = extractArgs(prop.value);
+        }
+      });
+    }
 
-            argProp.value.properties.forEach((detail) => {
-              if (detail.key.name === 'description') {
-                details.description = detail.value.value;
-              }
-              if (detail.key.name === 'defaultValue') {
-                if (detail.value.type === 'ArrayExpression') {
-                  details.defaultValue = detail.value.elements.map((el) =>
-                    el.type === 'ArrayExpression'
-                      ? el.elements.map((subEl) => subEl.value)
-                      : el.value
-                  );
-                  details.isList = true;
-                  details.type = 'object';
-                } else if (detail.value.type === 'ObjectExpression') {
-                  details.defaultValue = {};
-                  detail.value.properties.forEach((objProp) => {
-                    details.defaultValue[objProp.key.name] =
-                      objProp.value.value;
-                  });
-                  details.type = 'object';
-                } else {
-                  details.defaultValue = detail.value.value;
-                  details.type = typeof detail.value.value;
-                }
-              }
-              if (detail.key.name === 'type') {
-                details.type = detail.value.properties
-                  ? detail.value.properties[0].value.value
-                  : 'string';
-              }
-            });
+    if (
+      node.type === 'VariableDeclaration' &&
+      node.declarations.some(
+        (decl) => decl.id.name === 'meta' && decl.init.type === 'ObjectExpression'
+      )
+    ) {
+      const metaDecl = node.declarations.find(
+        (decl) => decl.id.name === 'meta'
+      );
+      if (metaDecl.init.properties) {
+        metaDecl.init.properties.forEach((prop) => {
+          if (prop.key.name === 'args') {
+            metadata.props = extractArgs(prop.value);
+          }
+        });
+      }
+    }
 
-            props.push({
-              name,
-              ...details,
-            });
-          });
-          metadata.props = props;
+    if (
+      node.type === 'ExportNamedDeclaration' &&
+      node.declaration.type === 'VariableDeclaration'
+    ) {
+      node.declaration.declarations.forEach((decl) => {
+        if (
+          decl.init.type === 'ObjectExpression' &&
+          decl.init.properties.some((prop) => prop.key.name === 'args')
+        ) {
+          const argsProp = decl.init.properties.find(
+            (prop) => prop.key.name === 'args'
+          );
+          metadata.props = [...metadata.props, ...extractArgs(argsProp.value)];
         }
       });
     }
@@ -122,7 +148,7 @@ const generatePrefabConfig = async () => {
     for (const file of storiesFiles) {
       const code = readFileSync(file, 'utf-8');
       const metadata = extractMetadata(code, file);
-
+       console.log('metadata:', metadata);
       const componentDir = dirname(file); // Directory containing the component
       console.log('componentDir:', componentDir);
       const componentName = basename(componentDir); // Component name
