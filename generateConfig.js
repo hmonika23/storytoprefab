@@ -50,15 +50,19 @@ const extractMetadata = (code, filePath) => {
 
   // Process AST to fetch props
   ast.program.body.forEach((node) => {
+    console.log('node:', node);
     if (
       node.type === 'ExportDefaultDeclaration' &&
       node.declaration.type === 'ObjectExpression'
     ) {
       node.declaration.properties.forEach((prop) => {
+
+        console.log('prop:', prop?.key?.name  )
         // Check for 'argTypes' safely
         if (prop?.key?.name === 'argTypes') {
           const props = [];
           prop.value.properties.forEach((argProp) => {
+            console.log('argProp:', argProp);
             const name = argProp.key.name;
             const details = {};
 
