@@ -23,7 +23,7 @@ const hasDefaultExport = (filePath) => {
     sourceType: 'module',
     plugins: ['typescript', 'jsx'], // For JSX and TypeScript support
   });
-console.log('ast:', ast);
+
   return ast.program.body.some(
     (node) =>
       node.type === 'ExportDefaultDeclaration'
@@ -39,122 +39,57 @@ const extractMetadata = (code, filePath) => {
 
   console.log('filePath:', filePath);
 
-  // Extract the parent directory name as the component name
-  const componentName = basename(dirname(filePath));
-  console.log('componentName:', componentName);
-
   const metadata = {
-    name: componentName.toLowerCase(),
+    name: basename(dirname(filePath)).toLowerCase(),
     props: [],
   };
 
-  // Process AST to fetch props
+  let metaObject = null;
+  let stories = [];
+
+  // Process AST to fetch props and metadata
   ast.program.body.forEach((node) => {
-    console.log('node:', node);
     if (
       node.type === 'ExportDefaultDeclaration' &&
       node.declaration.type === 'ObjectExpression'
     ) {
-      node.declaration.properties.forEach((prop) => {
+      metaObject = node.declaration;
+    }
 
-        console.log('prop:', prop?.key?.name  )
-        // Check for 'argTypes' safely
-        if (prop?.key?.name === 'argTypes') {
-          const props = [];
-          prop.value.properties.forEach((argProp) => {
-            console.log('argProp:', argProp);
-            const name = argProp.key.name;
-            const details = {};
-
-            // Safely extract details for each argument
-            argProp.value.properties.forEach((detail) => {
-              if (detail.key?.name === 'description') {
-                details.description = detail.value.value;
-              }
-              if (detail.key?.name === 'defaultValue') {
-                if (detail.value.type === 'ArrayExpression') {
-                  details.defaultValue = detail.value.elements.map((el) =>
-                    el.type === 'ArrayExpression'
-                      ? el.elements.map((subEl) => subEl.value)
-                      : el.value
-                  );
-                  details.isList = true;
-                  details.type = 'object';
-                } else if (detail.value.type === 'ObjectExpression') {
-                  details.defaultValue = {};
-                  detail.value.properties.forEach((objProp) => {
-                    details.defaultValue[objProp.key.name] = objProp.value.value;
-                  });
-                  details.type = 'object';
-                } else {
-                  details.defaultValue = detail.value.value;
-                  details.type = typeof detail.value.value;
-                }
-              }
-              if (detail.key?.name === 'type') {
-                details.type = detail.value.properties
-                  ? detail.value.properties[0].value.value
-                  : 'string';
-              }
-            });
-
-            props.push({
-              name,
-              ...details,
-            });
-          });
-          metadata.props = props;
-        }
-
-        // Adding check for 'args'
-        if (prop?.key?.name === 'args') {
-          const args = [];
-          prop.value.properties.forEach((argProp) => {
-            const name = argProp.key.name;
-            const details = {};
-
-            // Safely extract details for each argument
-            argProp.value.properties.forEach((detail) => {
-              if (detail.key?.name === 'description') {
-                details.description = detail.value.value;
-              }
-              if (detail.key?.name === 'defaultValue') {
-                if (detail.value.type === 'ArrayExpression') {
-                  details.defaultValue = detail.value.elements.map((el) =>
-                    el.type === 'ArrayExpression'
-                      ? el.elements.map((subEl) => subEl.value)
-                      : el.value
-                  );
-                  details.isList = true;
-                  details.type = 'object';
-                } else if (detail.value.type === 'ObjectExpression') {
-                  details.defaultValue = {};
-                  detail.value.properties.forEach((objProp) => {
-                    details.defaultValue[objProp.key.name] = objProp.value.value;
-                  });
-                  details.type = 'object';
-                } else {
-                  details.defaultValue = detail.value.value;
-                  details.type = typeof detail.value.value;
-                }
-              }
-              if (detail.key?.name === 'type') {
-                details.type = detail.value.properties
-                  ? detail.value.properties[0].value.value
-                  : 'string';
-              }
-            });
-
-            args.push({
-              name,
-              ...details,
-            });
-          });
-
-          metadata.args = args;
+    if (node.type === 'VariableDeclaration') {
+      node.declarations.forEach((declaration) => {
+        if (declaration.id.name === 'Basic') {
+          stories.push(declaration);
         }
       });
     }
+  });
+
+  // Extract args from the `meta` object
+  if (metaObject) {
+    console.log('metaObject:', metaObject);
+    metaObject.properties.forEach((prop) => {
+      if (prop.key.name === 'args') {
+        const args = {};
+        prop.value.properties.forEach((argProp) => {
+          args[argProp.key.name] = argProp.value.value;
+        });
+        metadata.props.push(args);
+      }
+    });
+  }
+
+  // Extract args from stories like `Basic`
+  stories.forEach((story) => {
+    story.init.properties.forEach((prop) => {
+      if (prop.key.name === 'args') {
+        const args = {};
+        prop.value.properties.forEach((argProp) => {
+          args[argProp.key.name] = argProp.value.value;
+        });
+        metadata.props.push(args);
+      }
+    });
   });
 
   return metadata;
@@ -175,7 +110,7 @@ const generatePrefabConfig = async () => {
     for (const file of storiesFiles) {
       const code = readFileSync(file, 'utf-8');
       const metadata = extractMetadata(code, file);
-
+      console.log('metadata:', metadata);
       const componentDir = dirname(file); // Directory containing the component
       console.log('componentDir:', componentDir);
       const componentName = basename(componentDir); // Component name
@@ -206,7 +141,6 @@ const generatePrefabConfig = async () => {
         module: `require('./${componentFile}').default`,
         include: [`./${componentFile}`],
         props: metadata.props,
-        args: metadata.args,
         packages: [],
       });
     }
