@@ -16,41 +16,18 @@ const getStoriesFiles = (baseDir) => {
   return files;
 };
 
-// Helper function to extract `args` from the `args` or `argTypes` node
-const extractArgsFromNode = (argsNode) => {
-  if (!argsNode || argsNode.type !== 'ObjectExpression') return [];
-  return argsNode.properties.map((prop) => {
-    const name = prop.key.name || prop.key.value; // Handle both identifier and string keys
-    let value = null;
-
-    switch (prop.value.type) {
-      case 'StringLiteral':
-      case 'NumericLiteral':
-      case 'BooleanLiteral':
-        value = prop.value.value;
-        break;
-      case 'CallExpression':
-        value = prop.value.callee.name; // Handles actions like `action("onPress")`
-        break;
-      case 'ArrayExpression':
-        value = prop.value.elements.map((el) =>
-          el.type === 'StringLiteral' || el.type === 'NumericLiteral'
-            ? el.value
-            : null
-        );
-        break;
-      case 'ObjectExpression':
-        value = {};
-        prop.value.properties.forEach((objProp) => {
-          value[objProp.key.name] = objProp.value.value;
-        });
-        break;
-      default:
-        value = null; // Default for unsupported types
-    }
-
-    return { name, value };
+// Function to check if a file has a default export
+const hasDefaultExport = (filePath) => {
+  const code = readFileSync(filePath, 'utf-8');
+  const ast = parse(code, {
+    sourceType: 'module',
+    plugins: ['typescript', 'jsx'], // For JSX and TypeScript support
   });
+console.log('ast:', ast);
+  return ast.program.body.some(
+    (node) =>
+      node.type === 'ExportDefaultDeclaration'
+  );
 };
 
 // Function to extract metadata from the parsed code
@@ -60,63 +37,122 @@ const extractMetadata = (code, filePath) => {
     plugins: ['typescript', 'jsx'], // For JSX and TypeScript support
   });
 
+  console.log('filePath:', filePath);
+
+  // Extract the parent directory name as the component name
+  const componentName = basename(dirname(filePath));
+  console.log('componentName:', componentName);
+
   const metadata = {
-    name: basename(dirname(filePath)).toLowerCase(),
+    name: componentName.toLowerCase(),
     props: [],
   };
 
-  let metaArgs = [];
-  let storyArgs = [];
-
+  // Process AST to fetch props
   ast.program.body.forEach((node) => {
-    // Detect `meta` default export or variable declaration
     if (
-      node.type === 'ExportDefaultDeclaration' ||
-      (node.type === 'VariableDeclaration' &&
-        node.declarations.some(
-          (decl) => decl.id.name === 'meta' && decl.init.type === 'ObjectExpression'
-        ))
+      node.type === 'ExportDefaultDeclaration' &&
+      node.declaration.type === 'ObjectExpression'
     ) {
-      const metaNode = node.declaration || node.declarations.find((d) => d.id.name === 'meta').init;
-      
-      // Extract `args` property from meta if exists
-      const argsProperty = metaNode.properties.find((prop) => prop.key.name === 'args');
-      if (argsProperty) {
-        metaArgs = extractArgsFromNode(argsProperty.value);
-      }
+      node.declaration.properties.forEach((prop) => {
+        // Check for 'argTypes' safely
+        if (prop?.key?.name === 'argTypes') {
+          const props = [];
+          prop.value.properties.forEach((argProp) => {
+            const name = argProp.key.name;
+            const details = {};
 
-      // Extract `argTypes` property from meta if exists
-      const argTypesProperty = metaNode.properties.find((prop) => prop.key.name === 'argTypes');
-      if (argTypesProperty) {
-        metaArgs = [...metaArgs, ...extractArgsFromNode(argTypesProperty.value)];
-      }
-    }
+            // Safely extract details for each argument
+            argProp.value.properties.forEach((detail) => {
+              if (detail.key?.name === 'description') {
+                details.description = detail.value.value;
+              }
+              if (detail.key?.name === 'defaultValue') {
+                if (detail.value.type === 'ArrayExpression') {
+                  details.defaultValue = detail.value.elements.map((el) =>
+                    el.type === 'ArrayExpression'
+                      ? el.elements.map((subEl) => subEl.value)
+                      : el.value
+                  );
+                  details.isList = true;
+                  details.type = 'object';
+                } else if (detail.value.type === 'ObjectExpression') {
+                  details.defaultValue = {};
+                  detail.value.properties.forEach((objProp) => {
+                    details.defaultValue[objProp.key.name] = objProp.value.value;
+                  });
+                  details.type = 'object';
+                } else {
+                  details.defaultValue = detail.value.value;
+                  details.type = typeof detail.value.value;
+                }
+              }
+              if (detail.key?.name === 'type') {
+                details.type = detail.value.properties
+                  ? detail.value.properties[0].value.value
+                  : 'string';
+              }
+            });
 
-    // Detect individual stories and their `args`
-    if (node.type === 'ExportNamedDeclaration') {
-      const variableDeclaration = node.declaration;
-      if (
-        variableDeclaration &&
-        variableDeclaration.type === 'VariableDeclaration'
-      ) {
-        variableDeclaration.declarations.forEach((decl) => {
-          if (
-            decl.init &&
-            decl.init.type === 'ObjectExpression' &&
-            decl.init.properties.some((prop) => prop.key.name === 'args')
-          ) {
-            const argsProperty = decl.init.properties.find(
-              (prop) => prop.key.name === 'args'
-            );
-            storyArgs.push(...extractArgsFromNode(argsProperty.value));
-          }
-        });
-      }
+            props.push({
+              name,
+              ...details,
+            });
+          });
+          metadata.props = props;
+        }
+
+        // Adding check for 'args'
+        if (prop?.key?.name === 'args') {
+          const args = [];
+          prop.value.properties.forEach((argProp) => {
+            const name = argProp.key.name;
+            const details = {};
+
+            // Safely extract details for each argument
+            argProp.value.properties.forEach((detail) => {
+              if (detail.key?.name === 'description') {
+                details.description = detail.value.value;
+              }
+              if (detail.key?.name === 'defaultValue') {
+                if (detail.value.type === 'ArrayExpression') {
+                  details.defaultValue = detail.value.elements.map((el) =>
+                    el.type === 'ArrayExpression'
+                      ? el.elements.map((subEl) => subEl.value)
+                      : el.value
+                  );
+                  details.isList = true;
+                  details.type = 'object';
+                } else if (detail.value.type === 'ObjectExpression') {
+                  details.defaultValue = {};
+                  detail.value.properties.forEach((objProp) => {
+                    details.defaultValue[objProp.key.name] = objProp.value.value;
+                  });
+                  details.type = 'object';
+                } else {
+                  details.defaultValue = detail.value.value;
+                  details.type = typeof detail.value.value;
+                }
+              }
+              if (detail.key?.name === 'type') {
+                details.type = detail.value.properties
+                  ? detail.value.properties[0].value.value
+                  : 'string';
+              }
+            });
+
+            args.push({
+              name,
+              ...details,
+            });
+          });
+
+          metadata.args = args;
+        }
+      });
     }
   });
 
-  // Merge `metaArgs` and `storyArgs`
-  metadata.props = [...metaArgs, ...storyArgs];
   return metadata;
 };
 
@@ -137,7 +173,9 @@ const generatePrefabConfig = async () => {
       const metadata = extractMetadata(code, file);
 
       const componentDir = dirname(file); // Directory containing the component
+      console.log('componentDir:', componentDir);
       const componentName = basename(componentDir); // Component name
+      console.log('componentName:', componentName);
       const possibleFiles = glob.sync(
         `${componentDir}/${componentName}.@(js|jsx|ts|tsx)`
       );
@@ -147,10 +185,14 @@ const generatePrefabConfig = async () => {
         continue;
       }
 
-      const componentFile = relative(baseDir, possibleFiles[0]).replace(
-        /\\/g,
-        '/'
-      );
+      const componentFile = relative(baseDir, possibleFiles[0]).replace(/\\/g, '/'); // Normalize to forward slashes
+
+      if (!hasDefaultExport(possibleFiles[0])) {
+        console.warn(`No default export found in ${possibleFiles[0]}`);
+        continue;
+      }
+
+      console.log('componentFile:', componentFile);
 
       components.push({
         name: metadata.name,
@@ -160,6 +202,7 @@ const generatePrefabConfig = async () => {
         module: `require('./${componentFile}').default`,
         include: [`./${componentFile}`],
         props: metadata.props,
+        args: metadata.args,
         packages: [],
       });
     }
