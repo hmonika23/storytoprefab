@@ -14,6 +14,8 @@ const getStoriesFiles = (baseDir) => {
 
 // Parse property details from an `args` or `argTypes` string
 const parseProps = (propsStr) => {
+  console.log("In parseProps function");
+  console.log('Parsing props:', propsStr);
   try {
     const parsedProps = eval(`(${propsStr})`); 
      console.log('Parsed props:', parsedProps); 
@@ -35,7 +37,11 @@ const parseProps = (propsStr) => {
 
 // Function to extract metadata (args or argTypes)
 const extractArgsOrArgTypes = (code) => {
+
+  console.log("In extractArgsOrArgTypes function");
+  console.log('Extracting args and argTypes from code:', code);
   const argsMatch = code.match(/args:\\s*{([\\s\\S]*?)}/);
+
   console.log('Extracted args:', argsMatch);
   const argTypesMatch = code.match(/argTypes:\\s*{([\\s\\S]*?)}/);
   console.log('Extracted argTypes:', argTypesMatch);
@@ -53,6 +59,7 @@ const extractArgsOrArgTypes = (code) => {
 
 // Main function to generate wmprefabconfig.json
 const generatePrefabConfig = async () => {
+  console.log("In generatePrefabConfig function");
   const baseDir = resolve(process.cwd(), './components');
   const outputPath = resolve(process.cwd(), './wmprefab.config.json');
 
@@ -65,9 +72,11 @@ const generatePrefabConfig = async () => {
 
     for (const file of storiesFiles) {
       const code = readFileSync(file, 'utf-8');
+      console.log('Processing file code:', code);
       const componentDir = dirname(file);
+      console.log('Component directory:', componentDir);
       const componentName = basename(componentDir);
-
+      console.log('Component name:', componentName);
       const possibleFiles = glob.sync(
         `${componentDir}/${componentName}.@(js|jsx|ts|tsx)`
       );
@@ -80,6 +89,7 @@ const generatePrefabConfig = async () => {
       const componentFile = relative(baseDir, possibleFiles[0]).replace(/\\\\/g, '/');
 
       const props = extractArgsOrArgTypes(code);
+      console.log('Extracted props:', props);
 
       components.push({
         name: componentName.toLowerCase(),
