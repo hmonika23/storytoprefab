@@ -4,7 +4,6 @@ import { readFileSync, writeFileSync } from 'fs';
 import { basename, dirname, resolve, relative } from 'path';
 import glob from 'glob';
 import * as babelParser from '@babel/parser';
-import generate from '@babel/generator';
 
 // Function to get all story files synchronously
 const getStoriesFiles = (baseDir) => {
@@ -25,7 +24,6 @@ const extractArgsOrArgTypes = (code) => {
 
   // Helper function to process object properties
   const processProperties = (node) => {
-    
     if (node.type === 'ObjectExpression') {
       for (const property of node.properties) {
         if (
@@ -74,14 +72,39 @@ const extractArgsOrArgTypes = (code) => {
   return props;
 };
 
+// Replace eval with a safer method to turn AST nodes into a usable object
 const evaluateNode = (node) => {
   try {
-    // Use safe evaluation to serialize the node into a JavaScript object
-    const serializedCode = `(${generate(node).code})`;
-    return eval(serializedCode);
+    if (node.type === 'ObjectExpression') {
+      const result = {};
+      node.properties.forEach(property => {
+        if (property.key && property.value) {
+          result[property.key.name || property.key.value] = getNodeValue(property.value);
+        }
+      });
+      return result;
+    }
+    return getNodeValue(node);
   } catch (error) {
     console.error('Error evaluating node:', error);
     return {};
+  }
+};
+
+// Convert a given AST node to its corresponding value
+const getNodeValue = (node) => {
+  switch (node.type) {
+    case 'Literal':
+      return node.value;
+    case 'ObjectExpression':
+      return evaluateNode(node); // Process object nodes recursively
+    case 'ArrayExpression':
+      return node.elements.map(element => getNodeValue(element));
+    case 'Identifier':
+      return node.name;
+    default:
+      console.warn('Unsupported node type:', node.type);
+      return null;
   }
 };
 
