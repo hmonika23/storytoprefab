@@ -1,114 +1,124 @@
 #!/usr/bin/env node
 
 import { readFileSync, writeFileSync } from 'fs';
-import { basename, dirname, resolve , relative} from 'path';
+import { resolve, basename, dirname, relative } from 'path';
 import glob from 'glob';
-import * as babelParser from '@babel/parser';
 
-const getStoriesFiles = (baseDir) => {
-  const pattern = `${baseDir.replace(/\\/g, '/')}/**/*.stories.@(js|jsx|ts|tsx)`;
-  console.log('Using glob pattern:', pattern);
-  return glob.sync(pattern);
+// Function to extract the meta and argTypes from Storybook code
+const extractMetaAndArgTypes = (storyCode) => {
+  console.log('Extracting meta and argTypes from story code...');
+  
+  // Extract meta using regex or another parsing method
+  const metaPattern = /export\s+default\s+(\{[^}]+\});/;
+  const metaMatch = storyCode.match(metaPattern);
+  
+  if (!metaMatch || !metaMatch[1]) {
+    console.log('No meta found.');
+    return { meta: {}, argTypes: {} };
+  }
+
+  const meta = eval(`(${metaMatch[1]})`); // Convert string to JSON-like object
+  console.log('Meta extracted:', meta);
+
+  // Extract `argTypes` if defined
+  const argTypes = meta.argTypes || {}; // Defaults to an empty object if not defined
+  console.log('ArgTypes extracted:', argTypes);
+  
+  return { meta, argTypes };
 };
 
-// Simple function to parse and get args/argTypes/props
-const parseArgsAndProps = (code) => {
-  console.log('Parsing code:', code);
+// Extract the argument types (from `argTypes` within meta)
+const extractArgTypes = (argTypes) => {
+  console.log('Extracting argument types (props)...');
+
   const props = [];
-  
-  // Parse the code into an Abstract Syntax Tree (AST)
-  const ast = babelParser.parse(code, {
-    sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
-  });
-  console.log('AST:', ast);
-  // Simple recursive function to extract node values
-  const extractNodeValue = (node) => {
-    switch (node.type) {
-      case 'Literal': return node.value;
-      case 'ObjectExpression': 
-        return node.properties.reduce((acc, { key, value }) => {
-          acc[key.name] = extractNodeValue(value);
-          return acc;
-        }, {});
-      case 'ArrayExpression': return node.elements.map(extractNodeValue);
-      case 'CallExpression': return `Function(${node.callee.name || 'Unknown function'})`;
-      case 'Identifier': return node.name;
-      default: return null;
-    }
-  };
-  
 
-  const extractProps = (node) => {
-    if (node.type === 'ObjectExpression') {
-      node.properties.forEach((property) => {
-        if (property.key && property.value) {
-          if (property.key.name === 'args' || property.key.name === 'argTypes') {
-            props.push({
-              name: property.key.name,
-              defaultValue: extractNodeValue(property.value),
-              isList: Array.isArray(property.value),
-            });
-          }
-        }
-      });
-    }
-  };
+  if (argTypes) {
+    Object.keys(argTypes).forEach((key) => {
+      const arg = argTypes[key];
 
-  ast.program.body.forEach((node) => extractProps(node));
+      const prop = {
+        name: key,
+        type: arg.type?.name || 'unknown',
+        defaultValue: arg.defaultValue || null,
+        description: arg.description || null,
+        isList: Array.isArray(arg.defaultValue),
+        controlType: arg.control?.type || null,
+      };
+
+      console.log(`Extracted prop for ${key}:`, prop);
+      props.push(prop);
+    });
+  }
 
   return props;
 };
 
-// Main function to generate wmprefabconfig.json
-const generatePrefabConfig = async () => {
-  const baseDir = resolve(process.cwd(), './components');
-  const outputPath = resolve(process.cwd(), './wmprefab.config.json');
+// Function to generate the wmprefab.config.json file
+const generateConfig = () => {
+  // Path where the storybook components are stored
+  const componentsDir = 'C:/Users/moikah_500338/Desktop/teststorytoprefab/storybookproject/components/';
+  console.log('Searching for stories in:', componentsDir);
 
-  console.log('Base directory:', baseDir);
-  console.log('Output path:', outputPath);
+  // Storybook components file patterns to match using glob
+  const storiesFiles = glob.sync(
+    `${componentsDir}/**/*.stories.@(js|jsx|ts|tsx)`
+  );
+  console.log('Story files found:', storiesFiles);
 
-  try {
-    const storiesFiles = getStoriesFiles(baseDir);
-    const components = [];
+  // Array to hold all components' metadata
+  const components = [];
 
-    // Iterate over each story file
-    for (const file of storiesFiles) {
-      const code = readFileSync(file, 'utf-8');
-      const componentDir = dirname(file);
-      const componentName = basename(componentDir);
-      const possibleFiles = glob.sync(
-        `${componentDir}/${componentName}.@(js|jsx|ts|tsx)`
-      );
+  // Iterate over story files and process each
+  storiesFiles.forEach((file) => {
+    console.log(`Processing file: ${file}`);
 
-      if (possibleFiles.length === 0) {
-        console.warn(`No component file found for ${componentName}`);
-        continue;
-      }
+    const code = readFileSync(file, 'utf-8');
+    const componentDir = dirname(file);
+    const componentName = basename(componentDir);
 
-      const componentFile = relative(baseDir, possibleFiles[0]).replace(/\\/g, '/');
+    // Use glob to find the component file corresponding to each story
+    const possibleFiles = glob.sync(
+      `${componentDir}/${componentName}.@(js|jsx|ts|tsx)`
+    );
 
-      const props = parseArgsAndProps(code);
-
-      components.push({
-        name: componentName.toLowerCase(),
-        version: '1.0.0',
-        displayName: componentName.replace(/-/g, ' ').toUpperCase(),
-        baseDir: './components',
-        module: `require('./${componentFile}').default`,
-        include: [`./${componentFile}`],
-        props,
-        packages: [],
-      });
+    // Ensure component file exists
+    if (possibleFiles.length === 0) {
+      console.warn(`No component file found for ${componentName}`);
+      return;
     }
 
-    const prefabConfig = { components };
-    writeFileSync(outputPath, JSON.stringify(prefabConfig, null, 2));
-    console.log(`wmprefabconfig.json generated at ${outputPath}`);
-  } catch (error) {
-    console.error('Error generating wmprefabconfig.json:', error);
-  }
+    const componentFile = relative(componentDir, possibleFiles[0]).replace(/\\/g, '/');
+    console.log(`Component file found for ${componentName}:`, componentFile);
+
+    // Extract `meta` and `argTypes` from the code
+    const { meta, argTypes } = extractMetaAndArgTypes(code);
+
+    // Extract `props` from `argTypes`
+    const props = extractArgTypes(argTypes);
+
+    // Push the processed component data into the components array
+    components.push({
+      name: componentName.toLowerCase(),
+      version: '1.0.0',
+      displayName: componentName.replace(/-/g, ' ').toUpperCase(),
+      baseDir: './components',
+      module: `require('./${componentFile}').default`,
+      include: [`./${componentFile}`],
+      props, // Include the properties (argTypes data)
+      packages: [],
+    });
+  });
+
+  // Construct the final config object
+  const config = { components };
+  console.log('Config object created:', config);
+
+  // Write the JSON output to a file named wmprefab.config.json
+  const outputPath = 'wmprefab.config.json';
+  writeFileSync(outputPath, JSON.stringify(config, null, 2), 'utf-8');
+  console.log(`wmprefab.config.json has been generated at ${outputPath}`);
 };
 
-// Run the function
-generatePrefabConfig();
+// Call the function at the end of the script
+generateConfig();
