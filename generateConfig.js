@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync, writeFileSync } from 'fs';
-import { basename, dirname, resolve } from 'path';
+import { basename, dirname, resolve , relative} from 'path';
 import glob from 'glob';
 import * as babelParser from '@babel/parser';
 
