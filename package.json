@@ -1,6 +1,6 @@
 {
   "name": "storybook-addon-storytoprefab",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "description": "This addon will be used to create a config file for prefab creation  and download option for the same ",
   "keywords": [
     "storybook-addons",
@@ -33,7 +33,7 @@
     "README.md",
     "*.js",
     "*.d.ts",
-     "generateConfig.js"
+    "generateConfig.js"
   ],
   "scripts": {
     "build": "tsup",
@@ -46,19 +46,15 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "postinstall": "echo 'Starting postinstall tasks...' && node ./generateConfig.js && echo 'Postinstall complete! Configuration generated.'"
-      
-    
-    
   },
   "dependencies": {
+    "@babel/traverse": "^7.26.4",
     "@storybook/icons": "^1.2.10",
     "user": "^0.0.0"
   },
-
   "bin": {
-  "storytoprefab_generate_prefabconfig": "./generateConfig.js"
-}
-,
+    "storytoprefab_generate_prefabconfig": "./generateConfig.js"
+  },
   "devDependencies": {
     "@storybook/addon-essentials": "0.0.0-pr-26654-sha-49d01553",
     "@storybook/addon-interactions": "0.0.0-pr-26654-sha-49d01553",
