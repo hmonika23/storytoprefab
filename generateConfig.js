@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { basename, dirname, resolve, relative } from 'path';
 import glob from 'glob';
 import * as babelParser from '@babel/parser';
-import traverse from '@babel/traverse';
+import generate from '@babel/generator';
 
 // Function to get all story files synchronously
 const getStoriesFiles = (baseDir) => {
@@ -23,38 +23,64 @@ const extractArgsOrArgTypes = (code) => {
     plugins: ['jsx', 'typescript'],
   });
 
-  traverse(ast, {
-    ObjectProperty(path) {
-      console.log("path", path);
-      console.log('Visiting ObjectProperty:', path.node.key.name);
-      const key = path.node.key.name;
-      if (key === 'args' || key === 'argTypes') {
-        const valueNode = path.node.value;
-        const extracted = evaluateNode(valueNode);
-        props.push(
-          ...Object.entries(extracted).map(([name, value]) => ({
-            name,
-            type: typeof value.defaultValue || typeof value,
-            defaultValue: value.defaultValue || value,
-            isList: Array.isArray(value.defaultValue || value),
-            description: value.description || null,
-          }))
-        );
-        path.stop(); // No need to traverse further once found
+  // Helper function to process object properties
+  const processProperties = (node) => {
+    
+    if (node.type === 'ObjectExpression') {
+      for (const property of node.properties) {
+        if (
+          property.type === 'ObjectProperty' &&
+          (property.key.name === 'args' || property.key.name === 'argTypes')
+        ) {
+          const extracted = evaluateNode(property.value);
+          props.push(
+            ...Object.entries(extracted).map(([name, value]) => ({
+              name,
+              type: typeof value.defaultValue || typeof value,
+              defaultValue: value.defaultValue || value,
+              isList: Array.isArray(value.defaultValue || value),
+              description: value.description || null,
+            }))
+          );
+        }
       }
-    },
-  });
+    }
+  };
 
+  // Recursively search for the `args` or `argTypes` properties
+  const findArgsOrArgTypes = (node) => {
+    if (!node || typeof node !== 'object') return;
+
+    if (node.type === 'ExportDefaultDeclaration' && node.declaration) {
+      processProperties(node.declaration);
+    } else if (node.type === 'VariableDeclaration') {
+      for (const decl of node.declarations) {
+        if (decl.init) processProperties(decl.init);
+      }
+    }
+
+    // Check child nodes recursively
+    for (const key in node) {
+      const value = node[key];
+      if (Array.isArray(value)) {
+        value.forEach(findArgsOrArgTypes);
+      } else if (typeof value === 'object') {
+        findArgsOrArgTypes(value);
+      }
+    }
+  };
+
+  findArgsOrArgTypes(ast);
   return props;
 };
 
 const evaluateNode = (node) => {
   try {
-    // Use a safe evaluation or serialization to turn the AST node into a JavaScript object
-    const code = `(${generate(node).code})`;
-    return eval(code); // or use a safer evaluator
-  } catch (err) {
-    console.error('Failed to evaluate node:', err);
+    // Use safe evaluation to serialize the node into a JavaScript object
+    const serializedCode = `(${generate(node).code})`;
+    return eval(serializedCode);
+  } catch (error) {
+    console.error('Error evaluating node:', error);
     return {};
   }
 };
