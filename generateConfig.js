@@ -3,58 +3,60 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { basename, dirname, resolve, relative } from 'path';
 import glob from 'glob';
+import * as babelParser from '@babel/parser';
+import traverse from '@babel/traverse';
 
 // Function to get all story files synchronously
 const getStoriesFiles = (baseDir) => {
-  const pattern = `${baseDir.replace(/\\\\/g, '/')}/**/*.stories.@(js|jsx|ts|tsx)`;
+  const pattern = `${baseDir.replace(/\\/g, '/')}/**/*.stories.@(js|jsx|ts|tsx)`;
   console.log('Using glob pattern:', pattern);
 
   return glob.sync(pattern);
 };
 
-// Parse property details from an `args` or `argTypes` string
-const parseProps = (propsStr) => {
-  console.log("In parseProps function");
-  console.log('Parsing props:', propsStr);
-  try {
-    const parsedProps = eval(`(${propsStr})`); 
-     console.log('Parsed props:', parsedProps); 
-    return Object.entries(parsedProps).map(([key, value]) => {
-      const isList = Array.isArray(value.defaultValue);
-      return {
-        name: key,
-        type: value.type || typeof value.defaultValue,
-        defaultValue: value.defaultValue || null,
-        isList: isList || false,
-        description: value.description || null,
-      };
-    });
-  } catch (error) {
-    console.error('Error parsing props:', error);
-    return [];
-  }
-};
-
-// Function to extract metadata (args or argTypes)
 const extractArgsOrArgTypes = (code) => {
-
-  console.log("In extractArgsOrArgTypes function");
-  console.log('Extracting args and argTypes from code:', code);
-  const argsMatch = code.match(/args:\\s*{([\\s\\S]*?)}/);
-
-  console.log('Extracted args:', argsMatch);
-  const argTypesMatch = code.match(/argTypes:\\s*{([\\s\\S]*?)}/);
-  console.log('Extracted argTypes:', argTypesMatch);
-
-  const argsStr = argsMatch ? argsMatch[0].replace('args:', '') : null;
-  console.log('Extracted argsStr:', argsStr);
-  const argTypesStr = argTypesMatch ? argTypesMatch[0].replace('argTypes:', '') : null;
-  console.log('Extracted argTypesStr:', argTypesStr);
   const props = [];
-  if (argsStr) props.push(...parseProps(argsStr));
-  if (argTypesStr) props.push(...parseProps(argTypesStr));
+
+  // Parse the code into an AST
+  const ast = babelParser.parse(code, {
+    sourceType: 'module',
+    plugins: ['jsx', 'typescript'],
+  });
+
+  traverse(ast, {
+    ObjectProperty(path) {
+      console.log("path", path);
+      console.log('Visiting ObjectProperty:', path.node.key.name);
+      const key = path.node.key.name;
+      if (key === 'args' || key === 'argTypes') {
+        const valueNode = path.node.value;
+        const extracted = evaluateNode(valueNode);
+        props.push(
+          ...Object.entries(extracted).map(([name, value]) => ({
+            name,
+            type: typeof value.defaultValue || typeof value,
+            defaultValue: value.defaultValue || value,
+            isList: Array.isArray(value.defaultValue || value),
+            description: value.description || null,
+          }))
+        );
+        path.stop(); // No need to traverse further once found
+      }
+    },
+  });
 
   return props;
+};
+
+const evaluateNode = (node) => {
+  try {
+    // Use a safe evaluation or serialization to turn the AST node into a JavaScript object
+    const code = `(${generate(node).code})`;
+    return eval(code); // or use a safer evaluator
+  } catch (err) {
+    console.error('Failed to evaluate node:', err);
+    return {};
+  }
 };
 
 // Main function to generate wmprefabconfig.json
@@ -86,7 +88,7 @@ const generatePrefabConfig = async () => {
         continue;
       }
 
-      const componentFile = relative(baseDir, possibleFiles[0]).replace(/\\\\/g, '/');
+      const componentFile = relative(baseDir, possibleFiles[0]).replace(/\\/g, '/');
 
       const props = extractArgsOrArgTypes(code);
       console.log('Extracted props:', props);
