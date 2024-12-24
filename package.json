@@ -48,6 +48,8 @@
     "postinstall": "echo 'Starting postinstall tasks...' && node ./generateConfig.js && echo 'Postinstall complete! Configuration generated.'"
   },
   "dependencies": {
+    "@babel/core": "^7.26.0",
+    "@babel/parser": "^7.26.3",
     "@babel/traverse": "^7.26.4",
     "@storybook/icons": "^1.2.10",
     "user": "^0.0.0"
