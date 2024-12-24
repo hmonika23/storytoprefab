@@ -6,44 +6,49 @@ import glob from 'glob';
 
 // Function to get all story files synchronously
 const getStoriesFiles = (baseDir) => {
-  const pattern = `${baseDir.replace(/\\/g, '/')}/**/*.stories.@(js|jsx|ts|tsx)`;
+  const pattern = `${baseDir.replace(/\\\\/g, '/')}/**/*.stories.@(js|jsx|ts|tsx)`;
   console.log('Using glob pattern:', pattern);
 
-  const files = glob.sync(pattern);
-  console.log('Found story files:', files);
+  return glob.sync(pattern);
+};
 
-  return files;
+// Parse property details from an `args` or `argTypes` string
+const parseProps = (propsStr) => {
+  try {
+    const parsedProps = eval(`(${propsStr})`); 
+     console.log('Parsed props:', parsedProps); 
+    return Object.entries(parsedProps).map(([key, value]) => {
+      const isList = Array.isArray(value.defaultValue);
+      return {
+        name: key,
+        type: value.type || typeof value.defaultValue,
+        defaultValue: value.defaultValue || null,
+        isList: isList || false,
+        description: value.description || null,
+      };
+    });
+  } catch (error) {
+    console.error('Error parsing props:', error);
+    return [];
+  }
 };
 
 // Function to extract metadata (args or argTypes)
-const extractArgsOrArgTypes = (code, filePath) => {
-  console.log('filePath:', filePath);
+const extractArgsOrArgTypes = (code) => {
+  const argsMatch = code.match(/args:\\s*{([\\s\\S]*?)}/);
+  console.log('Extracted args:', argsMatch);
+  const argTypesMatch = code.match(/argTypes:\\s*{([\\s\\S]*?)}/);
+  console.log('Extracted argTypes:', argTypesMatch);
 
-  const componentName = basename(dirname(filePath));
-  console.log('componentName:', componentName);
+  const argsStr = argsMatch ? argsMatch[0].replace('args:', '') : null;
+  console.log('Extracted argsStr:', argsStr);
+  const argTypesStr = argTypesMatch ? argTypesMatch[0].replace('argTypes:', '') : null;
+  console.log('Extracted argTypesStr:', argTypesStr);
+  const props = [];
+  if (argsStr) props.push(...parseProps(argsStr));
+  if (argTypesStr) props.push(...parseProps(argTypesStr));
 
-  let metadata = {
-    name: componentName.toLowerCase(),
-    props: [],
-  };
-
-  // Match and extract the `args` or `argTypes` object
-  const argsMatch = code.match(/args:\s*{([\s\S]*?)}/);
-  console.log('argsMatch:', argsMatch);
-  const argTypesMatch = code.match(/argTypes:\s*{([\s\S]*?)}/);
-  console.log('argTypesMatch:', argTypesMatch);
-  if (argsMatch) {
-    metadata.args = argsMatch[0];
- console.log('metadata.args:', metadata.args);
-  }
-
-  if (argTypesMatch) {
-    metadata.argTypes = argTypesMatch[0];
-
-    console.log('metadata.argTypes:', metadata.argTypes);
-  }
-
-  return metadata;
+  return props;
 };
 
 // Main function to generate wmprefabconfig.json
@@ -60,12 +65,9 @@ const generatePrefabConfig = async () => {
 
     for (const file of storiesFiles) {
       const code = readFileSync(file, 'utf-8');
-      const metadata = extractArgsOrArgTypes(code, file);
-
       const componentDir = dirname(file);
-      console.log('componentDir:', componentDir);
       const componentName = basename(componentDir);
-      console.log('componentName:', componentName);
+
       const possibleFiles = glob.sync(
         `${componentDir}/${componentName}.@(js|jsx|ts|tsx)`
       );
@@ -75,19 +77,18 @@ const generatePrefabConfig = async () => {
         continue;
       }
 
-      const componentFile = relative(baseDir, possibleFiles[0]).replace(/\\/g, '/');
+      const componentFile = relative(baseDir, possibleFiles[0]).replace(/\\\\/g, '/');
+
+      const props = extractArgsOrArgTypes(code);
 
       components.push({
-        name: metadata.name,
+        name: componentName.toLowerCase(),
         version: '1.0.0',
-        displayName: metadata.name.replace(/-/g, ' ').toUpperCase(),
+        displayName: componentName.replace(/-/g, ' ').toUpperCase(),
         baseDir: './components',
         module: `require('./${componentFile}').default`,
         include: [`./${componentFile}`],
-        metadata: {
-          args: metadata.args || null,
-          argTypes: metadata.argTypes || null,
-        },
+        props,
         packages: [],
       });
     }
