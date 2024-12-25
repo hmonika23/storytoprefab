@@ -1,87 +1,61 @@
 #!/usr/bin/env node
 
-import fs from 'fs';
-import path, { dirname, join, relative, basename } from 'path';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { resolve, basename, dirname, relative, join } from 'path';
 import glob from 'glob';
 
-/**
- * Dynamically finds the `components` directory.
- * @returns {string | null} Path to the `components` directory or null if not found.
- */
+
 const findComponentsDir = () => {
   const projectRoot = process.cwd();
+  console.log(`Searching for components directory in: ${projectRoot}`);
   const possibleDir = join(projectRoot, 'components');
-  if (fs.existsSync(possibleDir) && fs.statSync(possibleDir).isDirectory()) {
+  console.log(`Checking for components directory at: ${possibleDir}`);
+  if (existsSync(possibleDir) && fs.statSync(possibleDir).isDirectory()) {
     console.log(`Found components directory at: ${possibleDir}`);
     return possibleDir;
+  } else {
+    console.warn('Components directory not found.');
+    return null;
   }
-  console.warn('Components directory not found.');
-  return null;
 };
 
-/**
- * Extracts `args` and `argTypes` from the story source code.
- * @param {string} code - The story source code.
- * @returns {object} Extracted args and argTypes.
- */
+
 const extractArgsOrArgTypes = (code) => {
-  try {
-    const argsMatch = code.match(/args\s*=\s*({[\s\S]*?\n})/);
-    console.log('Extracted argsMatch:', argsMatch);
-    const argTypesMatch = code.match(/argTypes\s*=\s*({[\s\S]*?\n})/);
-    console.log('Extracted argTypesMatch:', argTypesMatch);
-    const args = argsMatch ? eval(`(${argsMatch[1]})`) : {};
-    const argTypes = argTypesMatch ? eval(`(${argTypesMatch[1]})`) : {};
+  const argsPattern = /args\s*:\s*(\{[\s\S]+?\}),/;
+  const argTypesPattern = /argTypes\s*:\s*(\{[\s\S]+?\}),/;
 
-    console.log('Extracted args:', args);
-    console.log('Extracted argTypes:', argTypes);
-    return { args, argTypes };
-  } catch (error) {
-    console.error('Error extracting args or argTypes:', error);
-    return { args: {}, argTypes: {} };
-  }
+  let argsMatch = code.match(argsPattern);
+  console.log('Args match:', argsMatch);
+  let argTypesMatch = code.match(argTypesPattern);
+   console.log('ArgTypes match:', argTypesMatch);
+  return {
+    args: argsMatch ? JSON.parse(argsMatch[1]) : {},
+    argTypes: argTypesMatch ? JSON.parse(argTypesMatch[1]) : {},
+  };
 };
 
-/**
- * Converts `args` and `argTypes` to the `props` format.
- * @param {object} args - Extracted args.
- * @param {object} argTypes - Extracted argTypes.
- * @returns {Array} Array of props.
- */
-const generateProps = (args, argTypes) => {
-  const props = [];
 
-  Object.entries(args || {}).forEach(([key, value]) => {
+const extractPropsFromArgsOrArgTypes = (args, argTypes) => {
+  console.log('Extracting props from args or argTypes:', args, argTypes);
+  const props = [];
+  const allProperties = { ...args, ...argTypes };
+
+  for (const [key, value] of Object.entries(allProperties)) {
     const prop = {
       name: key,
-      defaultValue: value,
-      type: Array.isArray(value) ? 'object' : typeof value,
-      isList: Array.isArray(value),
+      type: value?.type?.name || 'unknown',
+      description: value?.description || '',
+      defaultValue: args[key] || undefined,
+      isList: Array.isArray(args[key]),
     };
     props.push(prop);
-  });
-
-  Object.entries(argTypes || {}).forEach(([key, value]) => {
-    const existingProp = props.find((prop) => prop.name === key);
-    const newProp = {
-      name: key,
-      description: value.description || '',
-      type: value.type?.name || 'unknown',
-      isList: value.type?.name === 'array',
-      defaultValue: value.defaultValue,
-    };
-    if (existingProp) {
-      Object.assign(existingProp, newProp);
-    } else {
-      props.push(newProp);
-    }
-  });
+  }
 
   return props;
 };
 
 /**
- * Main function to generate `wmprefab.config.json`.
+ * Main function to generate the wmprefab.config.json file.
  */
 const generateConfig = () => {
   const componentsDir = findComponentsDir();
@@ -91,17 +65,26 @@ const generateConfig = () => {
   }
 
   console.log(`Using components directory: ${componentsDir}`);
-  const storyFiles = glob.sync(`${componentsDir}/**/*.stories.@(js|jsx|ts|tsx)`);
-  console.log('Story files found:', storyFiles);
+
+  // Find .stories.tsx files
+  const storiesFiles = glob.sync(
+    `${componentsDir}/**/*.stories.@(js|jsx|ts|tsx)`
+  );
+  console.log('Story files found:', storiesFiles);
 
   const components = [];
-  storyFiles.forEach((file) => {
+
+  storiesFiles.forEach((file) => {
     console.log(`Processing story file: ${file}`);
-    const code = fs.readFileSync(file, 'utf-8');
+
+    const code = readFileSync(file, 'utf-8');
     const componentDir = dirname(file);
     const componentName = basename(componentDir);
 
-    const possibleFiles = glob.sync(`${componentDir}/${componentName}.@(js|jsx|ts|tsx)`);
+    const possibleFiles = glob.sync(
+      `${componentDir}/${componentName}.@(js|jsx|ts|tsx)`
+    );
+
     if (possibleFiles.length === 0) {
       console.warn(`No component file found for ${componentName}`);
       return;
@@ -110,27 +93,30 @@ const generateConfig = () => {
     const componentFile = relative(componentDir, possibleFiles[0]).replace(/\\/g, '/');
     console.log(`Component file found for ${componentName}:`, componentFile);
 
+    // Extract props from args or argTypes
     const { args, argTypes } = extractArgsOrArgTypes(code);
-    const props = generateProps(args, argTypes);
+
+    const props = extractPropsFromArgsOrArgTypes(args, argTypes);
 
     components.push({
       name: componentName.toLowerCase(),
       version: '1.0.0',
       displayName: componentName.replace(/-/g, ' ').toUpperCase(),
       baseDir: './components',
-      module: `require('./${componentFile}').default`,
-      include: [`./${componentFile}`],
-      props,
-      packages: [],
+      module: `require('.${componentFile}/${componentFile}').default`,
+      include: [`.${componentFile}/${componentFile}`],
+      props, // Include the properties
+      packages: []
     });
   });
 
   const config = { components };
-  console.log('Final config object:', JSON.stringify(config, null, 2));
+  console.log('Config object created:', config);
 
   const outputPath = 'wmprefab.config.json';
-  fs.writeFileSync(outputPath, JSON.stringify(config, null, 2), 'utf-8');
+  writeFileSync(outputPath, JSON.stringify(config, null, 2), 'utf-8');
   console.log(`wmprefab.config.json has been generated at ${outputPath}`);
 };
 
+// Execute the generateConfig function
 generateConfig();
