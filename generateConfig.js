@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { resolve, basename, dirname, relative, join } from 'path';
+// Import only the functions used
+import { readFileSync, writeFileSync, existsSync, statSync } from 'fs';
+import { resolve, basename, dirname, relative } from 'path';
 import glob from 'glob';
 
-
+/**
+ * Dynamically finds the components directory in the project root.
+ */
 const findComponentsDir = () => {
   const projectRoot = process.cwd();
-  console.log(`Searching for components directory in: ${projectRoot}`);
-  const possibleDir = join(projectRoot, 'components');
-  console.log(`Checking for components directory at: ${possibleDir}`);
-  if (existsSync(possibleDir) && fs.statSync(possibleDir).isDirectory()) {
+  const possibleDir = resolve(projectRoot, 'components');
+  
+  if (existsSync(possibleDir) && statSync(possibleDir).isDirectory()) {
     console.log(`Found components directory at: ${possibleDir}`);
     return possibleDir;
   } else {
