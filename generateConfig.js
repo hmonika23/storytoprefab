@@ -11,7 +11,7 @@ import glob from 'glob';
 const findComponentsDir = () => {
   const projectRoot = process.cwd();
   const possibleDir = resolve(projectRoot, 'components');
-  
+
   if (existsSync(possibleDir) && statSync(possibleDir).isDirectory()) {
     console.log(`Found components directory at: ${possibleDir}`);
     return possibleDir;
@@ -21,22 +21,34 @@ const findComponentsDir = () => {
   }
 };
 
+/**
+ * Extracts a block (args or argTypes) based on the provided key from the content.
+ */
+function extractBlock(content, key) {
+  const regex = new RegExp(`${key}:\\s*{`, 'g');
+  const startMatch = regex.exec(content);
+  console.log(`Searching for ${key} block...`);
+  if (!startMatch) return null; // If no match, return null
 
-const extractArgsOrArgTypes = (code) => {
-  const argsPattern = /args\s*:\s*(\{[\s\S]+?\}),/;
-  const argTypesPattern = /argTypes\s*:\s*(\{[\s\S]+?\}),/;
+  let startIndex = startMatch.index + startMatch[0].length - 1; // Start after the key
+  let openBraces = 1; // Track opening braces
+  let endIndex = startIndex;
 
-  let argsMatch = code.match(argsPattern);
-  console.log('Args match:', argsMatch);
-  let argTypesMatch = code.match(argTypesPattern);
-   console.log('ArgTypes match:', argTypesMatch);
-  return {
-    args: argsMatch ? JSON.parse(argsMatch[1]) : {},
-    argTypes: argTypesMatch ? JSON.parse(argTypesMatch[1]) : {},
-  };
-};
+  while (openBraces > 0 && endIndex < content.length) {
+    endIndex++;
+    if (content[endIndex] === '{') openBraces++;
+    if (content[endIndex] === '}') openBraces--;
+  }
 
+  if (openBraces === 0) {
+    return content.substring(startMatch.index, endIndex + 1); // Return the entire block
+  }
+  return null; // If no closing brace found, return null
+}
 
+/**
+ * Extracts props from args or argTypes objects.
+ */
 const extractPropsFromArgsOrArgTypes = (args, argTypes) => {
   console.log('Extracting props from args or argTypes:', args, argTypes);
   const props = [];
@@ -68,7 +80,7 @@ const generateConfig = () => {
 
   console.log(`Using components directory: ${componentsDir}`);
 
-  // Find .stories.tsx files
+  // Find story files
   const storiesFiles = glob.sync(
     `${componentsDir}/**/*.stories.@(js|jsx|ts|tsx)`
   );
@@ -95,10 +107,20 @@ const generateConfig = () => {
     const componentFile = relative(componentDir, possibleFiles[0]).replace(/\\/g, '/');
     console.log(`Component file found for ${componentName}:`, componentFile);
 
-    // Extract props from args or argTypes
-    const { args, argTypes } = extractArgsOrArgTypes(code);
+    // Determine if args or argTypes should be extracted
+    const isTSX = file.endsWith('.tsx');
+    const key = isTSX ? 'args' : 'argTypes';
 
-    const props = extractPropsFromArgsOrArgTypes(args, argTypes);
+    const block = extractBlock(code, key);
+
+    let props = [];
+    if (block) {
+      const parsedBlock = eval(`(${block})`); // Parse the block dynamically
+      const args = isTSX ? parsedBlock : {};
+      const argTypes = isTSX ? {} : parsedBlock;
+
+      props = extractPropsFromArgsOrArgTypes(args, argTypes);
+    }
 
     components.push({
       name: componentName.toLowerCase(),
