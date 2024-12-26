@@ -107,20 +107,28 @@ const generateConfig = () => {
     const componentFile = relative(componentDir, possibleFiles[0]).replace(/\\/g, '/');
     console.log(`Component file found for ${componentName}:`, componentFile);
 
-    // Determine if args or argTypes should be extracted
-    const isTSX = file.endsWith('.tsx');
-    const key = isTSX ? 'args' : 'argTypes';
+// Determine if args or argTypes should be extracted
+const isTSX = file.endsWith('.tsx');
+const key = isTSX ? 'args' : 'argTypes';
 
-    const block = extractBlock(code, key);
+console.log(`Searching for ${key} block...`);
+const block = extractBlock(code, key);
 
-    let props = [];
-    if (block) {
-      const parsedBlock = eval(`(${block})`); // Parse the block dynamically
-      const args = isTSX ? parsedBlock : {};
-      const argTypes = isTSX ? {} : parsedBlock;
+let props = [];
+if (block) {
+  console.log(`${key} block found, parsing...`);
+  const parsedBlock = parseJSObject(block); // Use the safe parsing function here
 
-      props = extractPropsFromArgsOrArgTypes(args, argTypes);
-    }
+  if (parsedBlock) {
+    const args = isTSX ? parsedBlock : {};
+    const argTypes = isTSX ? {} : parsedBlock;
+
+    props = extractPropsFromArgsOrArgTypes(args, argTypes);
+  } else {
+    console.warn(`Failed to parse ${key} block for ${file}`);
+  }
+}
+
 
     components.push({
       name: componentName.toLowerCase(),
