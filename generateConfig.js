@@ -64,28 +64,56 @@ const parseJSObject = (jsObjectString) => {
   }
 };
 
+const inferTypeFromValue = (value) => {
+  if (Array.isArray(value)) {
+    return 'object'; // Treat array as an object
+  } else if (value === null) {
+    return 'null';
+  } else if (typeof value === 'object') {
+    return 'object';
+  } else {
+    return typeof value; // string, number, boolean, etc.
+  }
+};
 
-/**
- * Extracts props from args or argTypes objects.
- */
-const extractPropsFromArgsOrArgTypes = (args, argTypes) => {
-  console.log('Extracting props from args or argTypes:', args, argTypes);
+const extractPropsFromArgsOrArgTypes = (propsSource) => {
   const props = [];
-  const allProperties = { ...args, ...argTypes };
 
-  for (const [key, value] of Object.entries(allProperties)) {
+  for (const [key, value] of Object.entries(propsSource)) {
+    let type;
+    let description = '';
+    let defaultValue = undefined;
+    let isList = false;
+
+    // Check if we're dealing with `args` or `argTypes`
+    if (value?.type && value?.type.name) {
+      // We are working with `argTypes` so use its structure
+      type = value.type.name === 'array' ? 'object' : value.type.name || inferTypeFromValue(value);
+      description = value.description || '';
+      defaultValue = value.defaultValue;
+      isList = Array.isArray(value.defaultValue);
+    } else {
+      // Handle `args` structure where we only check the value
+      type = inferTypeFromValue(value);
+      defaultValue = value;
+      isList = Array.isArray(value);
+    }
+
     const prop = {
       name: key,
-      type: value?.type?.name || 'unknown',
-      description: value?.description || '',
-      defaultValue: args[key] || undefined,
-      isList: Array.isArray(args[key]),
+      type,
+      description,
+      defaultValue,
+      isList,
     };
+
     props.push(prop);
   }
 
   return props;
 };
+
+
 
 /**
  * Main function to generate the wmprefab.config.json file.
