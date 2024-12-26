@@ -184,7 +184,7 @@ if (block) {
       version: '1.0.0',
       displayName: componentName.replace(/-/g, ' ').toUpperCase(),
       baseDir: './components',
-      module: `require('.${componentName}/${componentFile}').default`,
+      module: `require('./${componentName}/${componentFile}').default`,
       include: [`./${componentName}/${componentFile}`],
       props, // Include the properties
       packages: []
