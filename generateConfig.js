@@ -131,26 +131,23 @@ const isTSX = file.endsWith('.tsx');
 const key = isTSX ? 'args' : 'argTypes';
 
 console.log(`Searching for ${key} block...`);
-const block = extractBlock(code, key);
-
 let props = [];
+const block = extractBlock(code, key); // Original block
 if (block) {
+  const cleanBlock = block.replace(new RegExp(`^${key}:\\s*`), '').trim(); // Remove the '<key>:' prefix
 
-  console.log("Parsing block", block);
-  console.log(`${key} block found, parsing...`);
-  const parsedBlock = parseJSObject(block); // Use the safe parsing function
- 
+  const sanitizedBlock = cleanBlock.replace(/,\s*}/g, '}'); // Remove trailing commas
+  console.log(`Sanitized block: ${sanitizedBlock}`);
+  
+  const parsedBlock = parseJSObject(sanitizedBlock);
   if (parsedBlock) {
-    const args = isTSX ? parsedBlock : {};
-    const argTypes = isTSX ? {} : parsedBlock;
-
-    props = extractPropsFromArgsOrArgTypes(args, argTypes);
+    console.log('Parsed block:', parsedBlock);
+    props = extractPropsFromArgsOrArgTypes(parsedBlock, {});
   } else {
-    console.warn(`Failed to parse ${key} block for ${file}`);
+    console.warn('Failed to parse sanitized block for', file);
   }
-} else {
-  console.warn(`No ${key} block found in ${file}`);
 }
+
 
 
 
@@ -159,8 +156,8 @@ if (block) {
       version: '1.0.0',
       displayName: componentName.replace(/-/g, ' ').toUpperCase(),
       baseDir: './components',
-      module: `require('.${componentFile}/${componentFile}').default`,
-      include: [`./${componentFile}/${componentFile}`],
+      module: `require('.${componentName}/${componentFile}').default`,
+      include: [`./${componentName}/${componentFile}`],
       props, // Include the properties
       packages: []
     });
