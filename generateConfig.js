@@ -27,6 +27,7 @@ const findComponentsDir = () => {
 function extractBlock(content, key) {
   const regex = new RegExp(`${key}:\\s*{`, 'g');
   const startMatch = regex.exec(content);
+  console.log('startMatch', startMatch);
   console.log(`Searching for ${key} block...`);
   if (!startMatch) return null; // If no match, return null
 
@@ -45,6 +46,22 @@ function extractBlock(content, key) {
   }
   return null; // If no closing brace found, return null
 }
+
+/**
+ * Safely parses a JavaScript-like object from a string.
+ * Handles parsing inline objects in args or argTypes.
+ */
+const parseJSObject = (jsObjectString) => {
+  try {
+    // Using Function constructor to evaluate the string as a JavaScript object.
+    // This assumes the string is syntactically correct as a JavaScript object.
+    return Function(`"use strict"; return (${jsObjectString});`)();
+  } catch (error) {
+    console.error('Failed to parse JS Object:', error.message);
+    return null;
+  }
+};
+
 
 /**
  * Extracts props from args or argTypes objects.
@@ -116,9 +133,11 @@ const block = extractBlock(code, key);
 
 let props = [];
 if (block) {
-  console.log(`${key} block found, parsing...`);
-  const parsedBlock = parseJSObject(block); // Use the safe parsing function here
 
+  console.log("Parsing block", block);
+  console.log(`${key} block found, parsing...`);
+  const parsedBlock = parseJSObject(block); // Use the safe parsing function
+ 
   if (parsedBlock) {
     const args = isTSX ? parsedBlock : {};
     const argTypes = isTSX ? {} : parsedBlock;
@@ -127,7 +146,10 @@ if (block) {
   } else {
     console.warn(`Failed to parse ${key} block for ${file}`);
   }
+} else {
+  console.warn(`No ${key} block found in ${file}`);
 }
+
 
 
     components.push({
