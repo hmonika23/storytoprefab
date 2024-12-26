@@ -52,10 +52,12 @@ function extractBlock(content, key) {
  * Handles parsing inline objects in args or argTypes.
  */
 const parseJSObject = (jsObjectString) => {
+
+  console.log('In parseJSObject ,Parsing JS Object:', jsObjectString);
   try {
-    // Using Function constructor to evaluate the string as a JavaScript object.
-    // This assumes the string is syntactically correct as a JavaScript object.
-    return Function(`"use strict"; return (${jsObjectString});`)();
+    // Trim and normalize multiline strings for valid JavaScript
+    const normalizedString = jsObjectString.replace(/(\r\n|\n|\r)/gm, "").trim();
+    return Function(`"use strict"; return (${normalizedString});`)();
   } catch (error) {
     console.error('Failed to parse JS Object:', error.message);
     return null;
@@ -158,7 +160,7 @@ if (block) {
       displayName: componentName.replace(/-/g, ' ').toUpperCase(),
       baseDir: './components',
       module: `require('.${componentFile}/${componentFile}').default`,
-      include: [`.${componentFile}/${componentFile}`],
+      include: [`./${componentFile}/${componentFile}`],
       props, // Include the properties
       packages: []
     });
